@@ -1,77 +1,73 @@
-Sender code:
-
 #include <ArduinoBLE.h>
+
+int emgPin = A0;     // EMG sensor input
+int threshold = 500; // adjust this later
 
 void setup() {
   Serial.begin(9600);
 
   if (!BLE.begin()) {
-    Serial.println("Starting BLE failed!");
+    Serial.println("BLE failed");
     while (1);
   }
 
-  Serial.println("Central starting scan...");
-  
-  // Scan specifically for the Service UUID we defined in the Peripheral
+  Serial.println("Scanning...");
   BLE.scanForUuid("19B10000-E8F2-537E-4F6C-D104768A1214");
 }
 
 void loop() {
-  // Check if we found a peripheral matching our scan
   BLEDevice peripheral = BLE.available();
 
   if (peripheral) {
-    Serial.print("Found Peripheral: ");
+    Serial.print("Found: ");
     Serial.println(peripheral.localName());
 
-    // Stop scanning since we found what we were looking for
     BLE.stopScan();
 
-    // Try to connect and control the LED
-    controlLed(peripheral);
+    sendEMG(peripheral);
 
-    // If we disconnect, start scanning again
     BLE.scanForUuid("19B10000-E8F2-537E-4F6C-D104768A1214");
   }
 }
 
-void controlLed(BLEDevice peripheral) {
-  // Connect to the peripheral
-  Serial.println("Connecting...");
+void sendEMG(BLEDevice peripheral) {
   if (!peripheral.connect()) {
-    Serial.println("Failed to connect!");
+    Serial.println("Connect fail");
     return;
   }
 
-  // Discover peripheral attributes (services and characteristics)
-  Serial.println("Discovering attributes...");
+  Serial.println("Connected");
+
   if (!peripheral.discoverAttributes()) {
-    Serial.println("Attribute discovery failed!");
+    Serial.println("No attributes");
     peripheral.disconnect();
     return;
   }
 
-  // Retrieve the specific LED characteristic
-  BLECharacteristic ledCharacteristic = peripheral.characteristic("19B10001-E8F2-537E-4F6C-D104768A1214");
+  BLECharacteristic myChar = peripheral.characteristic("19B10001-E8F2-537E-4F6C-D104768A1214");
 
-  if (!ledCharacteristic) {
-    Serial.println("Peripheral does not have the LED characteristic!");
+  if (!myChar) {
+    Serial.println("No characteristic");
     peripheral.disconnect();
     return;
   }
 
-  Serial.println("Connected and ready to control LED!");
-
-  // Loop to toggle the LED while we remain connected
   while (peripheral.connected()) {
-    // Send a '1' to turn the LED on
-    ledCharacteristic.writeValue((byte)0x01);
-    delay(1000);
 
-    // Send a '0' to turn the LED off
-    ledCharacteristic.writeValue((byte)0x00);
-    delay(1000);
+    int emgValue = analogRead(emgPin);
+    Serial.println(emgValue); // see values in monitor
+
+    // simple threshold check
+    if (emgValue > threshold) {
+      myChar.writeValue((byte)1);
+      Serial.println("Send 1");
+    } else {
+      myChar.writeValue((byte)0);
+      Serial.println("Send 0");
+    }
+
+    delay(100); // small delay to keep it stable
   }
 
-  Serial.println("Peripheral disconnected.");
+  Serial.println("Disconnected");
 }
