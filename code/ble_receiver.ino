@@ -1,68 +1,57 @@
-Receiver Code:
-
 #include <ArduinoBLE.h>
+#include <Servo.h>
 
-// Set up a unique UUID for the Service and the Characteristic
-// You can generate custom UUIDs online if you ever need new ones
-BLEService ledService("19B10000-E8F2-537E-4F6C-D104768A1214"); 
+BLEService myService("19B10000-E8F2-537E-4F6C-D104768A1214");
+BLEByteCharacteristic myChar("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);
 
-// Create a Byte characteristic that the Central can read and write to
-BLEByteCharacteristic ledCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);
+Servo myServo;
 
 void setup() {
   Serial.begin(9600);
-  pinMode(LED_BUILTIN, OUTPUT);
+  
+  myServo.attach(3); // servo connected to pin 3
+  myServo.write(0);  // start open
 
-  // Initialize the BLE hardware
   if (!BLE.begin()) {
-    Serial.println("Starting BLE failed!");
+    Serial.println("BLE failed");
     while (1);
   }
 
-  // Set the name that will appear when scanning
   BLE.setLocalName("NanoLED");
-  
-  // Attach the service and characteristic
-  BLE.setAdvertisedService(ledService);
-  ledService.addCharacteristic(ledCharacteristic);
-  BLE.addService(ledService);
+  BLE.setAdvertisedService(myService);
 
-  // Set the initial value of the characteristic to 0 (LED off)
-  ledCharacteristic.writeValue(0);
+  myService.addCharacteristic(myChar);
+  BLE.addService(myService);
 
-  // Start broadcasting!
+  myChar.writeValue(0);
+
   BLE.advertise();
-  Serial.println("Peripheral advertising. Waiting for connections...");
+  Serial.println("Waiting...");
 }
 
 void loop() {
-  // Check if a Central device has connected
   BLEDevice central = BLE.central();
 
   if (central) {
-    Serial.print("Connected to Central MAC: ");
-    Serial.println(central.address());
+    Serial.println("Connected");
 
-    // Keep running this while the boards are connected
     while (central.connected()) {
-      
-      // If the Central wrote a new value to our characteristic
-      if (ledCharacteristic.written()) {
-        
-        // Read the value and update the LED
-        if (ledCharacteristic.value()) {
-          Serial.println("LED ON");
-          digitalWrite(LED_BUILTIN, HIGH);
+
+      if (myChar.written()) {
+        byte val = myChar.value();
+
+        // 1 = close hand, 0 = open hand
+        if (val == 1) {
+          myServo.write(180);
+          Serial.println("Close");
         } else {
-          Serial.println("LED OFF");
-          digitalWrite(LED_BUILTIN, LOW);
+          myServo.write(0);
+          Serial.println("Open");
         }
       }
     }
 
-    // If the loop breaks, the Central disconnected
-    Serial.print("Disconnected from Central MAC: ");
-    Serial.println(central.address());
-    digitalWrite(LED_BUILTIN, LOW); // Turn off LED on disconnect
+    Serial.println("Disconnected");
+    myServo.write(0); // open hand on disconnect
   }
 }
